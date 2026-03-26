@@ -20,6 +20,10 @@ type InterviewSession = {
     role: string;
     difficulty: string;
     duration: number;
+    resume_id?: number | null;
+    job_description_id?: number | null;
+    resume_title?: string | null;
+    job_description_title?: string | null;
     status: string;
     created_at: string;
 };
@@ -139,6 +143,13 @@ export default function DashboardPage() {
             duration: String(session.duration),
         });
 
+        if (session.resume_id) {
+            query.set("resume_id", String(session.resume_id));
+        }
+        if (session.job_description_id) {
+            query.set("job_description_id", String(session.job_description_id));
+        }
+
         router.push(`/interview/new?${query.toString()}`);
     };
 
@@ -232,6 +243,12 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-3">
+                        <Link
+                            href="/personalization"
+                            className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 font-medium text-cyan-300 transition hover:bg-cyan-500/15"
+                        >
+                            Personalization
+                        </Link>
                         <Link
                             href="/interview/new"
                             className="rounded-xl bg-cyan-500 px-4 py-2.5 font-semibold text-slate-950 transition hover:bg-cyan-400"
@@ -403,6 +420,16 @@ export default function DashboardPage() {
                                                         <span className="rounded-full border border-slate-800 bg-slate-900/80 px-3 py-1">
                                                             {session.duration} min
                                                         </span>
+                                                        {session.resume_title && (
+                                                            <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1">
+                                                                Resume: {session.resume_title}
+                                                            </span>
+                                                        )}
+                                                        {session.job_description_title && (
+                                                            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1">
+                                                                JD: {session.job_description_title}
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     <div className="mt-4 space-y-1 text-sm text-slate-500">

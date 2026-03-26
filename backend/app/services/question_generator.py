@@ -3,6 +3,14 @@ def generate_first_question(interview_type: str, role: str, difficulty: str) -> 
     interview_type = interview_type.lower()
     difficulty = difficulty.lower()
 
+    if interview_type == "hr_voice":
+        if difficulty == "easy":
+            return f"To get us started, can you tell me about yourself and what attracted you to this {role} opportunity?"
+        elif difficulty == "medium":
+            return f"Tell me about a professional experience that best reflects who you are as a {role} and how you work with other people."
+        else:
+            return f"Walk me through a high-pressure professional situation that shaped how you lead, communicate, or make decisions as a {role}."
+
     if interview_type == "behavioral":
         if difficulty == "easy":
             return f"Tell me about yourself and why you are interested in a {role} role."
@@ -61,6 +69,15 @@ def generate_followup_question(
     interview_type = interview_type.lower()
     role = role.lower()
     difficulty = difficulty.lower()
+
+    if interview_type == "hr_voice":
+        hr_questions = [
+            "What kind of work environment helps you do your best work, and why?",
+            "Tell me about a time you had to handle conflict or tension with a teammate or stakeholder.",
+            "What feedback have you received recently that changed how you work?",
+            "Why do you believe you are a strong fit for this role right now?",
+        ]
+        return hr_questions[answer_count % len(hr_questions)]
 
     if interview_type == "behavioral":
         behavioral_questions = [

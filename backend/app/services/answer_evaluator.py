@@ -141,18 +141,137 @@ def _recommended_topics_from_dimensions(
     return deduped[:5]
 
 
+def _analyze_code_submission(
+    question: str,
+    code_submission: str,
+    code_language: str,
+) -> Dict:
+    code_clean = (code_submission or "").strip()
+    language = (code_language or "code").strip() or "code"
+
+    if not code_clean:
+        return {
+            "code_quality_score": None,
+            "code_feedback": "",
+        }
+
+    lines = [line for line in code_clean.splitlines() if line.strip()]
+    code_lower = code_clean.lower()
+    line_count = len(lines)
+    keyword_hits = sum(
+        1
+        for token in [
+            "def ",
+            "function ",
+            "class ",
+            "if ",
+            "else",
+            "for ",
+            "while ",
+            "return",
+            "try",
+            "catch",
+            "import ",
+            "from ",
+            "const ",
+            "let ",
+            "var ",
+        ]
+        if token in code_lower
+    )
+    comment_hits = sum(1 for token in ["//", "#", "/*"] if token in code_clean)
+    question_overlap = _keyword_overlap(question, code_clean)
+
+    code_quality_score = 20
+    if line_count >= 4:
+        code_quality_score += 12
+    if line_count >= 8:
+        code_quality_score += 12
+    if line_count >= 15:
+        code_quality_score += 10
+    code_quality_score += min(24, keyword_hits * 4)
+    code_quality_score += min(8, comment_hits * 4)
+    code_quality_score += min(12, question_overlap * 4)
+    code_quality_score = _clamp_score(code_quality_score)
+
+    feedback_parts = []
+    if line_count <= 3:
+        feedback_parts.append(
+            f"The {language} submission is very short, so it does not yet show a complete working approach."
+        )
+    else:
+        feedback_parts.append(
+            f"The {language} submission shows a concrete implementation attempt instead of only a verbal description."
+        )
+
+    if keyword_hits >= 3:
+        feedback_parts.append(
+            "There is some visible control flow or functional structure, which helps demonstrate implementation thinking."
+        )
+    else:
+        feedback_parts.append(
+            "A stronger submission should show clearer control flow, helper structure, or decomposition."
+        )
+
+    if question_overlap <= 1:
+        feedback_parts.append(
+            "Make the code more tightly aligned with the stated problem constraints and explain the intended behavior."
+        )
+    else:
+        feedback_parts.append(
+            "The code appears reasonably connected to the prompt, but it would be stronger with clearer edge-case handling and explanation."
+        )
+
+    return {
+        "code_quality_score": code_quality_score,
+        "code_feedback": " ".join(feedback_parts).strip(),
+    }
+
+
+def _build_no_evidence_session_feedback(
+    interview_type: str,
+    role: str,
+    difficulty: str,
+) -> Dict:
+    return {
+        "overall_score": 5,
+        "communication_score": 5,
+        "technical_score": 5,
+        "problem_solving_score": 5,
+        "confidence_score": 5,
+        "strengths": "No answer evidence was collected, so the session cannot support a meaningful positive assessment.",
+        "improvements": "Complete at least one full answer with clear reasoning, specifics, and ownership before relying on the score.",
+        "summary": (
+            f"This {difficulty} {interview_type} interview for a {role} role ended before the candidate answered any questions, "
+            "so the report reflects insufficient evidence rather than interview performance."
+        ),
+        "standout_strengths": ["Session started"],
+        "weak_areas": ["No answer evidence", "Incomplete interview"],
+        "recommended_topics": [
+            "Complete full interview rounds",
+            "Answer with specific examples",
+            "Stay engaged through at least one full response",
+        ],
+        "question_count": 0,
+    }
+
+
 def evaluate_answer_fallback(
     question: str,
     answer: str,
     interview_type: str,
     role: str,
     difficulty: str,
+    code_submission: str = "",
+    code_language: str = "",
 ) -> Dict:
     answer_clean = answer.strip()
     answer_lower = answer_clean.lower()
     word_count = len(answer_clean.split())
     sentence_count = max(1, len(re.findall(r"[.!?]+", answer_clean)))
     overlap = _keyword_overlap(question, answer_clean)
+    code_present = bool((code_submission or "").strip())
+    code_analysis = _analyze_code_submission(question, code_submission, code_language)
 
     # Very weak starting point. Strong answers must earn score upward.
     communication_score = 25
@@ -203,11 +322,35 @@ def evaluate_answer_fallback(
 
     relevance_score += min(25, overlap * 5)
 
+    if code_present and code_analysis["code_quality_score"] is not None:
+        technical_score = max(
+            technical_score,
+            round((technical_score + int(code_analysis["code_quality_score"])) / 2),
+        )
+        structure_score = max(
+            structure_score,
+            min(85, 22 + len([line for line in code_submission.splitlines() if line.strip()]) * 2),
+        )
+        relevance_score = max(
+            relevance_score,
+            min(80, 20 + _keyword_overlap(question, code_submission) * 6),
+        )
+        if word_count <= 3:
+            communication_score = max(communication_score, 12)
+            confidence_score = max(confidence_score, 14)
+
     # Extra harshness for "empty but longer filler" style answers
     if word_count > 0 and tech_hits == 0 and overlap == 0 and action_hits == 0 and structure_hits == 0:
         technical_score -= 8
         relevance_score -= 8
         structure_score -= 5
+
+    if code_present and word_count == 0:
+        improvements_list_seed = [
+            "Briefly explain the approach, complexity, and tradeoffs alongside the code submission."
+        ]
+    else:
+        improvements_list_seed = []
 
     communication_score = _clamp_score(communication_score)
     structure_score = _clamp_score(structure_score)
@@ -259,6 +402,10 @@ def evaluate_answer_fallback(
     if not improvements_list:
         improvements_list.append("Make the answer more precise, structured, and technically grounded.")
 
+    for item in improvements_list_seed:
+        if item not in improvements_list:
+            improvements_list.append(item)
+
     if word_count <= 8:
         missed_opportunities = (
             "The answer was too short to demonstrate meaningful reasoning, depth, or technical judgment."
@@ -279,6 +426,9 @@ def evaluate_answer_fallback(
             "highlight important tradeoffs, and end with the result or impact."
         )
 
+    if code_present:
+        ideal_answer += " If code is submitted, also explain the approach, complexity, and key edge cases."
+
     recommended_topics = _recommended_topics_from_dimensions(
         interview_type,
         role,
@@ -296,6 +446,14 @@ def evaluate_answer_fallback(
     elif word_count <= 15 and tech_hits == 0 and overlap <= 1:
         overall_score = min(overall_score, 45)
 
+    if code_present and code_analysis["code_quality_score"] is not None:
+        overall_score = max(
+            overall_score,
+            min(75, round((overall_score + int(code_analysis["code_quality_score"])) / 2)),
+        )
+        if word_count == 0:
+            overall_score = min(overall_score, 52)
+
     return {
         "overall_score": overall_score,
         "communication_score": communication_score,
@@ -307,6 +465,8 @@ def evaluate_answer_fallback(
         "improvements": " ".join(improvements_list),
         "missed_opportunities": missed_opportunities,
         "ideal_answer": ideal_answer,
+        "code_quality_score": code_analysis["code_quality_score"],
+        "code_feedback": code_analysis["code_feedback"],
         "recommended_topics": recommended_topics,
     }
 
@@ -317,9 +477,17 @@ def evaluate_answer_with_gemini(
     interview_type: str,
     role: str,
     difficulty: str,
+    code_submission: str = "",
+    code_language: str = "",
 ) -> Dict:
     if not settings.GEMINI_API_KEY or client is None:
         raise ValueError("GEMINI_API_KEY is not configured")
+
+    answer_section = answer or "No written explanation was provided."
+    code_section = "No code submitted."
+    if (code_submission or "").strip():
+        language = (code_language or "plaintext").strip() or "plaintext"
+        code_section = f"Language: {language}\nCode:\n{code_submission}"
 
     prompt = f"""
 You are an expert interview evaluator.
@@ -334,7 +502,10 @@ Question:
 {question}
 
 Candidate answer:
-{answer}
+{answer_section}
+
+Submitted code:
+{code_section}
 
 Return ONLY valid JSON with exactly these keys:
 overall_score
@@ -347,15 +518,20 @@ strengths
 improvements
 missed_opportunities
 ideal_answer
+code_quality_score
+code_feedback
 recommended_topics
 
 Rules:
 - all score fields must be integers from 0 to 100
 - very short, vague, or low-effort answers should score low
+- if code is submitted, review it separately and reflect that in code_quality_score/code_feedback
+- if no code is submitted, set code_quality_score to null and code_feedback to an empty string
 - strengths must be a string
 - improvements must be a string
 - missed_opportunities must be a string
 - ideal_answer must be a string
+- code_feedback must be a string
 - recommended_topics must be an array of short strings
 - no markdown
 - no code fences
@@ -383,6 +559,8 @@ Rules:
         "improvements",
         "missed_opportunities",
         "ideal_answer",
+        "code_quality_score",
+        "code_feedback",
         "recommended_topics",
     ]
 
@@ -399,6 +577,11 @@ Rules:
         "relevance_score",
     ]:
         data[score_key] = int(data[score_key])
+
+    if data["code_quality_score"] is not None:
+        data["code_quality_score"] = int(data["code_quality_score"])
+    else:
+        data["code_feedback"] = ""
 
     if not isinstance(data["recommended_topics"], list):
         data["recommended_topics"] = []
@@ -418,6 +601,8 @@ def evaluate_answer(
     interview_type: str,
     role: str,
     difficulty: str,
+    code_submission: str = "",
+    code_language: str = "",
 ) -> Dict:
     try:
         data = evaluate_answer_with_gemini(
@@ -426,14 +611,22 @@ def evaluate_answer(
             interview_type,
             role,
             difficulty,
+            code_submission=code_submission,
+            code_language=code_language,
         )
 
         # Guardrails even when Gemini is used
         answer_clean = answer.strip().lower()
         word_count = len(answer.strip().split())
+        code_present = bool((code_submission or "").strip())
 
         if answer_clean in LOW_SIGNAL_ANSWERS or word_count <= 3:
-            data["overall_score"] = min(int(data["overall_score"]), 18)
+            if code_present and data.get("code_quality_score") is not None:
+                data["overall_score"] = min(int(data["overall_score"]), 52)
+                data["communication_score"] = min(int(data["communication_score"]), 18)
+                data["confidence_score"] = min(int(data["confidence_score"]), 22)
+            else:
+                data["overall_score"] = min(int(data["overall_score"]), 18)
         elif word_count <= 8:
             data["overall_score"] = min(int(data["overall_score"]), 32)
 
@@ -445,6 +638,8 @@ def evaluate_answer(
             interview_type,
             role,
             difficulty,
+            code_submission=code_submission,
+            code_language=code_language,
         )
 
 
@@ -455,20 +650,11 @@ def build_session_feedback_fallback(
     difficulty: str,
 ) -> Dict:
     if not evaluations:
-        return {
-            "overall_score": 20,
-            "communication_score": 20,
-            "technical_score": 20,
-            "problem_solving_score": 20,
-            "confidence_score": 20,
-            "strengths": "The session was started, but there was too little evidence to make a strong evaluation.",
-            "improvements": "Complete more questions and provide detailed, structured answers with clearer technical depth.",
-            "summary": f"This {difficulty} {interview_type} interview for a {role} role ended with insufficient evidence for a confident evaluation.",
-            "standout_strengths": ["Initial engagement"],
-            "weak_areas": ["Insufficient answer depth", "Incomplete interview"],
-            "recommended_topics": ["Structured answering", "Question-focused responses"],
-            "question_count": 0,
-        }
+        return _build_no_evidence_session_feedback(
+            interview_type,
+            role,
+            difficulty,
+        )
 
     communication_score = round(mean([e["communication_score"] for e in evaluations]))
     technical_score = round(mean([e["technical_score"] for e in evaluations]))
@@ -741,6 +927,13 @@ def build_session_feedback_from_evaluations(
     role: str,
     difficulty: str,
 ) -> Dict:
+    if not evaluations:
+        return _build_no_evidence_session_feedback(
+            interview_type,
+            role,
+            difficulty,
+        )
+
     try:
         data = build_session_feedback_with_gemini(
             evaluations,

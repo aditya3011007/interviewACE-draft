@@ -17,9 +17,14 @@ type Feedback = {
     strengths: string;
     improvements: string;
     summary: string;
+    resume_jd_alignment_summary: string;
     standout_strengths: string[];
     weak_areas: string[];
     recommended_topics: string[];
+    matched_strengths_for_job: string[];
+    risky_gaps: string[];
+    best_interview_stories: string[];
+    next_practice_priorities: string[];
     question_count: number;
     created_at: string;
 };
@@ -31,6 +36,10 @@ type Session = {
     role: string;
     difficulty: string;
     duration: number;
+    resume_id?: number | null;
+    job_description_id?: number | null;
+    resume_title?: string | null;
+    job_description_title?: string | null;
     status: string;
     created_at: string;
 };
@@ -41,16 +50,21 @@ type Evaluation = {
     question_index: number;
     question_text: string;
     answer_text: string;
+    code_language?: string | null;
+    code_submission?: string | null;
     overall_score: number;
     communication_score: number;
     technical_score: number;
     structure_score: number;
     confidence_score: number;
     relevance_score: number;
+    code_quality_score?: number | null;
     strengths: string;
     improvements: string;
     missed_opportunities: string;
     ideal_answer: string;
+    code_feedback?: string | null;
+    critic_summary?: string | null;
     recommended_topics: string[];
     created_at: string;
 };
@@ -145,6 +159,13 @@ export default function InterviewReportPage() {
             duration: String(session.duration),
         });
 
+        if (session.resume_id) {
+            query.set("resume_id", String(session.resume_id));
+        }
+        if (session.job_description_id) {
+            query.set("job_description_id", String(session.job_description_id));
+        }
+
         return `/interview/new?${query.toString()}`;
     }, [session]);
 
@@ -201,6 +222,16 @@ export default function InterviewReportPage() {
                             <span className="rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1">
                                 {feedback.question_count} evaluated answers
                             </span>
+                            {session.resume_title && (
+                                <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-cyan-300">
+                                    Resume: {session.resume_title}
+                                </span>
+                            )}
+                            {session.job_description_title && (
+                                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-emerald-300">
+                                    JD: {session.job_description_title}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -353,6 +384,81 @@ export default function InterviewReportPage() {
                 </div>
 
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+                        <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">
+                            Resume vs JD alignment
+                        </p>
+                        <p className="mt-4 leading-8 text-slate-200">
+                            {feedback.resume_jd_alignment_summary}
+                        </p>
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                            Best stories to use
+                        </p>
+                        <div className="mt-4 space-y-3">
+                            {feedback.best_interview_stories.map((story) => (
+                                <div
+                                    key={story}
+                                    className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-slate-200"
+                                >
+                                    {story}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 grid gap-6 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+                        <h3 className="text-xl font-semibold text-emerald-300">
+                            Matched strengths for this job
+                        </h3>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {feedback.matched_strengths_for_job.map((item) => (
+                                <span
+                                    key={item}
+                                    className="rounded-full border border-emerald-500/20 bg-emerald-500/15 px-3 py-1 text-sm text-emerald-200"
+                                >
+                                    {item}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+                        <h3 className="text-xl font-semibold text-red-300">Risky gaps</h3>
+                        <div className="mt-4 space-y-3">
+                            {feedback.risky_gaps.map((item) => (
+                                <div
+                                    key={item}
+                                    className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-slate-200"
+                                >
+                                    {item}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 rounded-3xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+                    <p className="text-xs uppercase tracking-[0.18em] text-fuchsia-300">
+                        Next practice priorities
+                    </p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        {feedback.next_practice_priorities.map((item) => (
+                            <div
+                                key={item}
+                                className="rounded-2xl border border-fuchsia-500/20 bg-slate-950/70 p-4 text-slate-200"
+                            >
+                                {item}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="mt-8 grid gap-6 lg:grid-cols-2">
                     <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur">
                         <h3 className="text-2xl font-semibold text-emerald-300">Strengths</h3>
                         <p className="mt-5 leading-8 text-slate-300">{feedback.strengths}</p>
@@ -408,6 +514,37 @@ export default function InterviewReportPage() {
                                         {evaluation.answer_text}
                                     </p>
                                 </div>
+
+                                {evaluation.code_submission && (
+                                    <div className="mt-5 rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-5">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-300">
+                                                    Submitted code
+                                                </p>
+                                                <p className="mt-2 text-sm text-slate-200">
+                                                    {evaluation.code_language
+                                                        ? `Language: ${evaluation.code_language}`
+                                                        : "Code submission"}
+                                                </p>
+                                            </div>
+                                            {evaluation.code_quality_score !== null &&
+                                                evaluation.code_quality_score !== undefined && (
+                                                    <span className="rounded-full border border-slate-800 bg-slate-950 px-3 py-1 text-sm font-medium text-fuchsia-300">
+                                                        {evaluation.code_quality_score}/100
+                                                    </span>
+                                                )}
+                                        </div>
+                                        <pre className="mt-4 overflow-x-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm leading-6 text-slate-200">
+                                            <code>{evaluation.code_submission}</code>
+                                        </pre>
+                                        {evaluation.code_feedback && (
+                                            <p className="mt-4 leading-7 text-slate-200">
+                                                {evaluation.code_feedback}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="mt-5 grid gap-4 md:grid-cols-5">
                                     <div className="rounded-2xl bg-slate-900/70 p-4">
@@ -491,6 +628,17 @@ export default function InterviewReportPage() {
                                         </p>
                                     </div>
                                 </div>
+
+                                {evaluation.critic_summary && (
+                                    <div className="mt-6 rounded-2xl border border-indigo-500/20 bg-indigo-500/10 p-5">
+                                        <p className="text-xs uppercase tracking-[0.16em] text-indigo-300">
+                                            Critic audit
+                                        </p>
+                                        <p className="mt-3 leading-7 text-slate-200">
+                                            {evaluation.critic_summary}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {evaluation.recommended_topics.length > 0 && (
                                     <div className="mt-5">

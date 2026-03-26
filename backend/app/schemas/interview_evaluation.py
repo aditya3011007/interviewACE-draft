@@ -14,6 +14,8 @@ class InterviewEvaluationResponse(BaseModel):
 
     question_text: str
     answer_text: str
+    code_language: Optional[str] = None
+    code_submission: Optional[str] = None
 
     overall_score: int
     communication_score: int
@@ -21,11 +23,14 @@ class InterviewEvaluationResponse(BaseModel):
     structure_score: int
     confidence_score: int
     relevance_score: int
+    code_quality_score: Optional[int] = None
 
     strengths: str
     improvements: str
     missed_opportunities: str
     ideal_answer: str
+    code_feedback: Optional[str] = None
+    critic_summary: Optional[str] = None
     recommended_topics: List[str]
 
     created_at: datetime

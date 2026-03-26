@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
@@ -13,6 +13,10 @@ type InterviewSession = {
     role: string;
     difficulty: string;
     duration: number;
+    resume_id?: number | null;
+    job_description_id?: number | null;
+    resume_title?: string | null;
+    job_description_title?: string | null;
     status: string;
     created_at: string;
 };
@@ -31,20 +35,34 @@ type LiveEvaluation = {
     question_index: number;
     question_text: string;
     answer_text: string;
+    code_language?: string | null;
+    code_submission?: string | null;
     overall_score: number;
     communication_score: number;
     technical_score: number;
     structure_score: number;
     confidence_score: number;
     relevance_score: number;
+    code_quality_score?: number | null;
     strengths: string;
     improvements: string;
     missed_opportunities: string;
     ideal_answer: string;
+    code_feedback?: string | null;
     recommended_topics: string[];
 };
 
 type VoiceMode = "toggle" | "hold";
+
+const CODE_LANGUAGES = [
+    "python",
+    "javascript",
+    "typescript",
+    "java",
+    "c++",
+    "go",
+    "sql",
+];
 
 function MetricCard({
     label,
@@ -118,7 +136,7 @@ export default function InterviewSessionPage() {
 
     const sessionId = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
-    const recognitionRef = useRef<any>(null);
+    const recognitionRef = useRef<SpeechRecognition | null>(null);
     const recognitionStartedRef = useRef(false);
     const autoSpokenQuestionIdRef = useRef<number | null>(null);
     const queuedQuestionIdRef = useRef<number | null>(null);
@@ -126,6 +144,9 @@ export default function InterviewSessionPage() {
     const [session, setSession] = useState<InterviewSession | null>(null);
     const [messages, setMessages] = useState<InterviewMessage[]>([]);
     const [answer, setAnswer] = useState("");
+    const [codingPanelOpen, setCodingPanelOpen] = useState(false);
+    const [codeLanguage, setCodeLanguage] = useState("python");
+    const [codeSubmission, setCodeSubmission] = useState("");
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [ending, setEnding] = useState(false);
@@ -160,6 +181,7 @@ export default function InterviewSessionPage() {
         100,
         Math.round((userAnswerCount / maxAnswers) * 100)
     );
+    const hasCodeSubmission = codeSubmission.trim().length > 0;
 
     const voiceSummary = useMemo(() => {
         if (!voiceInputSupported && !voiceOutputSupported) return "Text only";
@@ -191,7 +213,7 @@ export default function InterviewSessionPage() {
             setIsListening(true);
         };
 
-        recognition.onresult = (event: any) => {
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
             let interimText = "";
             let finalText = "";
 
@@ -216,7 +238,7 @@ export default function InterviewSessionPage() {
             setLiveTranscript(interimText.trim());
         };
 
-        recognition.onerror = (event: any) => {
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
             const errorCode = event?.error || "unknown";
             if (errorCode !== "aborted") {
                 setVoiceError(`Voice input error: ${errorCode}`);
@@ -297,6 +319,11 @@ export default function InterviewSessionPage() {
                     setLatestEvaluation(evaluations[evaluations.length - 1]);
                 }
 
+                if (sessionRes.data.interview_type === "hr_voice") {
+                    router.push(`/interview/${sessionId}/hr-voice`);
+                    return;
+                }
+
                 if (sessionRes.data.status === "completed") {
                     router.push(`/interview/${sessionId}/report`);
                     return;
@@ -360,49 +387,52 @@ export default function InterviewSessionPage() {
         return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     };
 
-    const speakText = (text: string, messageId?: number) => {
-        if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const speakText = useCallback(
+        (text: string, messageId?: number) => {
+            if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-        try {
-            window.speechSynthesis.cancel();
+            try {
+                window.speechSynthesis.cancel();
 
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1;
-            utterance.pitch = 1;
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1;
+                utterance.pitch = 1;
 
-            utterance.onstart = () => {
-                setVoiceError("");
-                setIsSpeaking(true);
-                if (messageId) {
-                    autoSpokenQuestionIdRef.current = messageId;
-                }
-            };
+                utterance.onstart = () => {
+                    setVoiceError("");
+                    setIsSpeaking(true);
+                    if (messageId) {
+                        autoSpokenQuestionIdRef.current = messageId;
+                    }
+                };
 
-            utterance.onend = () => {
-                setIsSpeaking(false);
-                if (
-                    queuedQuestionIdRef.current &&
-                    latestAiQuestion &&
-                    queuedQuestionIdRef.current === latestAiQuestion.id &&
-                    !isListening
-                ) {
-                    queuedQuestionIdRef.current = null;
-                    setQueuedAutoRead(false);
-                    speakText(latestAiQuestion.message, latestAiQuestion.id);
-                }
-            };
+                utterance.onend = () => {
+                    setIsSpeaking(false);
+                    if (
+                        queuedQuestionIdRef.current &&
+                        latestAiQuestion &&
+                        queuedQuestionIdRef.current === latestAiQuestion.id &&
+                        !isListening
+                    ) {
+                        queuedQuestionIdRef.current = null;
+                        setQueuedAutoRead(false);
+                        speakText(latestAiQuestion.message, latestAiQuestion.id);
+                    }
+                };
 
-            utterance.onerror = () => {
-                setIsSpeaking(false);
+                utterance.onerror = () => {
+                    setIsSpeaking(false);
+                    setVoiceError("Voice playback failed.");
+                };
+
+                window.speechSynthesis.speak(utterance);
+            } catch (error) {
+                console.error("Failed to speak text:", error);
                 setVoiceError("Voice playback failed.");
-            };
-
-            window.speechSynthesis.speak(utterance);
-        } catch (error) {
-            console.error("Failed to speak text:", error);
-            setVoiceError("Voice playback failed.");
-        }
-    };
+            }
+        },
+        [isListening, latestAiQuestion]
+    );
 
     useEffect(() => {
         if (!autoReadEnabled || !voiceOutputSupported || !latestAiQuestion || loading) {
@@ -427,6 +457,7 @@ export default function InterviewSessionPage() {
         loading,
         isListening,
         submitting,
+        speakText,
     ]);
 
     useEffect(() => {
@@ -441,7 +472,14 @@ export default function InterviewSessionPage() {
         queuedQuestionIdRef.current = null;
         setQueuedAutoRead(false);
         speakText(latestAiQuestion.message, latestAiQuestion.id);
-    }, [latestAiQuestion, autoReadEnabled, voiceOutputSupported, isListening, isSpeaking]);
+    }, [
+        latestAiQuestion,
+        autoReadEnabled,
+        voiceOutputSupported,
+        isListening,
+        isSpeaking,
+        speakText,
+    ]);
 
     const startListening = () => {
         if (!voiceInputSupported || !recognitionRef.current) return;
@@ -496,7 +534,7 @@ export default function InterviewSessionPage() {
     };
 
     const handleSubmitAnswer = async () => {
-        if (!answer.trim() || !token || !sessionId) return;
+        if ((!answer.trim() && !codeSubmission.trim()) || !token || !sessionId) return;
 
         setSubmitting(true);
 
@@ -507,7 +545,11 @@ export default function InterviewSessionPage() {
         try {
             const res = await api.post(
                 `/interviews/${sessionId}/answer`,
-                { message: answer },
+                {
+                    message: answer,
+                    code_language: codeSubmission.trim() ? codeLanguage : "",
+                    code_submission: codeSubmission,
+                },
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -518,6 +560,8 @@ export default function InterviewSessionPage() {
             setMessages((prev) => [...prev, ...res.data.messages]);
             setLatestEvaluation(res.data.evaluation || null);
             setAnswer("");
+            setCodeSubmission("");
+            setCodingPanelOpen(false);
             setLiveTranscript("");
 
             if (res.data.completed) {
@@ -614,6 +658,16 @@ export default function InterviewSessionPage() {
                             <span className="rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1">
                                 {session.duration} min
                             </span>
+                            {session.resume_title && (
+                                <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-cyan-300">
+                                    Resume: {session.resume_title}
+                                </span>
+                            )}
+                            {session.job_description_title && (
+                                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-emerald-300">
+                                    JD: {session.job_description_title}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -839,6 +893,13 @@ export default function InterviewSessionPage() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCodingPanelOpen(true)}
+                                        className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-2.5 text-sm font-medium text-fuchsia-300 transition hover:bg-fuchsia-500/15"
+                                    >
+                                        {hasCodeSubmission ? "Edit Code" : "Open Coding Panel"}
+                                    </button>
                                     {voiceMode === "toggle" ? (
                                         <>
                                             <button
@@ -940,18 +1001,26 @@ export default function InterviewSessionPage() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-3">
+                                    {hasCodeSubmission && (
+                                        <span className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-4 py-3 text-sm font-medium text-fuchsia-300">
+                                            Code attached: {codeLanguage}
+                                        </span>
+                                    )}
                                     <button
                                         type="button"
-                                        onClick={() => setAnswer("")}
-                                        disabled={!answer.trim()}
+                                        onClick={() => {
+                                            setAnswer("");
+                                            setCodeSubmission("");
+                                        }}
+                                        disabled={!answer.trim() && !codeSubmission.trim()}
                                         className="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                                     >
-                                        Clear Answer
+                                        Clear Response
                                     </button>
 
                                     <button
                                         onClick={handleSubmitAnswer}
-                                        disabled={submitting || !answer.trim()}
+                                        disabled={submitting || (!answer.trim() && !codeSubmission.trim())}
                                         className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         {submitting ? "Submitting..." : "Submit Answer"}
@@ -1000,6 +1069,20 @@ export default function InterviewSessionPage() {
                                     <span className="font-medium text-white">Answers used:</span>{" "}
                                     {userAnswerCount} / {maxAnswers}
                                 </p>
+                                {session.resume_title && (
+                                    <p>
+                                        <span className="font-medium text-white">Resume:</span>{" "}
+                                        {session.resume_title}
+                                    </p>
+                                )}
+                                {session.job_description_title && (
+                                    <p>
+                                        <span className="font-medium text-white">
+                                            Job description:
+                                        </span>{" "}
+                                        {session.job_description_title}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -1063,6 +1146,43 @@ export default function InterviewSessionPage() {
                                     </div>
                                 </div>
 
+                                {latestEvaluation.code_quality_score !== null &&
+                                    latestEvaluation.code_quality_score !== undefined && (
+                                        <div className="mt-5 rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-5">
+                                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-xs uppercase tracking-[0.16em] text-fuchsia-300">
+                                                        Code review
+                                                    </p>
+                                                    <p className="mt-2 text-sm text-slate-200">
+                                                        {latestEvaluation.code_language
+                                                            ? `Language: ${latestEvaluation.code_language}`
+                                                            : "Submitted code"}
+                                                    </p>
+                                                </div>
+                                                <span className="rounded-full border border-slate-800 bg-slate-950 px-3 py-1 text-sm font-semibold text-fuchsia-300">
+                                                    {latestEvaluation.code_quality_score}/100
+                                                </span>
+                                            </div>
+                                            {latestEvaluation.code_feedback && (
+                                                <p className="mt-4 text-sm leading-7 text-slate-200">
+                                                    {latestEvaluation.code_feedback}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                {latestEvaluation.code_submission && (
+                                    <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                                            Submitted code
+                                        </p>
+                                        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                                            <code>{latestEvaluation.code_submission}</code>
+                                        </pre>
+                                    </div>
+                                )}
+
                                 {latestEvaluation.recommended_topics.length > 0 && (
                                     <div className="mt-5">
                                         <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
@@ -1104,6 +1224,97 @@ export default function InterviewSessionPage() {
                     </div>
                 </div>
             </div>
+            {codingPanelOpen && (
+                <div className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm">
+                    <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-slate-800 bg-slate-950 shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-5">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.18em] text-fuchsia-300">
+                                    Coding workspace
+                                </p>
+                                <h3 className="mt-2 text-2xl font-semibold text-white">
+                                    Attach a code-based answer
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setCodingPanelOpen(false)}
+                                className="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-6 py-6">
+                            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                                    Current prompt
+                                </p>
+                                <p className="mt-3 leading-7 text-slate-200">
+                                    {latestAiQuestion?.message ||
+                                        "Open the coding panel when you want to answer with code."}
+                                </p>
+                            </div>
+
+                            <div className="mt-5">
+                                <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    Language
+                                </label>
+                                <select
+                                    value={codeLanguage}
+                                    onChange={(e) => setCodeLanguage(e.target.value)}
+                                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3.5 outline-none transition focus:border-fuchsia-500"
+                                >
+                                    {CODE_LANGUAGES.map((language) => (
+                                        <option key={language} value={language}>
+                                            {language}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="mt-5">
+                                <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    Code submission
+                                </label>
+                                <textarea
+                                    rows={20}
+                                    value={codeSubmission}
+                                    onChange={(e) => setCodeSubmission(e.target.value)}
+                                    placeholder="Write or paste your code here. You can still add a written explanation in the main answer box."
+                                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 font-mono text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fuchsia-500"
+                                />
+                            </div>
+
+                            <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 text-sm text-slate-300">
+                                Submit code when the interviewer asks a coding-heavy question.
+                                The app will keep your normal written answer review and add
+                                separate code-quality feedback without running the code.
+                            </div>
+                        </div>
+
+                        <div className="border-t border-slate-800 px-6 py-5">
+                            <div className="flex flex-wrap justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setCodeSubmission("")}
+                                    disabled={!codeSubmission.trim()}
+                                    className="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                                >
+                                    Clear Code
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCodingPanelOpen(false)}
+                                    className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-3 text-sm font-medium text-fuchsia-300 transition hover:bg-fuchsia-500/15"
+                                >
+                                    Save and Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }

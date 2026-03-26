@@ -16,6 +16,8 @@ class InterviewEvaluation(Base):
 
     question_text = Column(Text, nullable=False)
     answer_text = Column(Text, nullable=False)
+    code_language = Column(Text, nullable=True)
+    code_submission = Column(Text, nullable=True)
 
     overall_score = Column(Integer, nullable=False)
     communication_score = Column(Integer, nullable=False)
@@ -23,11 +25,14 @@ class InterviewEvaluation(Base):
     structure_score = Column(Integer, nullable=False)
     confidence_score = Column(Integer, nullable=False)
     relevance_score = Column(Integer, nullable=False)
+    code_quality_score = Column(Integer, nullable=True)
 
     strengths = Column(Text, nullable=False)
     improvements = Column(Text, nullable=False)
     missed_opportunities = Column(Text, nullable=False)
     ideal_answer = Column(Text, nullable=False)
+    code_feedback = Column(Text, nullable=True)
     recommended_topics = Column(JSON, nullable=False, default=list)
+    critic_summary = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -16,10 +16,15 @@ class InterviewFeedbackResponse(BaseModel):
     strengths: str
     improvements: str
     summary: str
+    resume_jd_alignment_summary: str
 
     standout_strengths: List[str]
     weak_areas: List[str]
     recommended_topics: List[str]
+    matched_strengths_for_job: List[str]
+    risky_gaps: List[str]
+    best_interview_stories: List[str]
+    next_practice_priorities: List[str]
     question_count: int
 
     created_at: datetime

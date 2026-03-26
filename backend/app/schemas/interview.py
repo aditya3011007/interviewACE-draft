@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -7,6 +9,8 @@ class InterviewSessionCreate(BaseModel):
     role: str
     difficulty: str
     duration: int
+    resume_id: Optional[int] = None
+    job_description_id: Optional[int] = None
 
 
 class InterviewSessionResponse(BaseModel):
@@ -16,6 +20,10 @@ class InterviewSessionResponse(BaseModel):
     role: str
     difficulty: str
     duration: int
+    resume_id: Optional[int] = None
+    job_description_id: Optional[int] = None
+    resume_title: Optional[str] = None
+    job_description_title: Optional[str] = None
     status: str
     created_at: datetime
 
