@@ -11,6 +11,24 @@ InterviewAce AI runs realistic, voice-capable mock interviews driven by an agent
 - **Multi-model AI pipeline.** Uses OpenAI and Google Gemini together — Gemini also powers a live voice interview experience (`gemini_voice_service.py`) so answers can be spoken, not just typed.
 - **Full evaluation loop.** Every answer is scored by an evaluator + critic pair (`answer_evaluator.py`, `evaluation_critic.py`) and rolled up into a final report by a report synthesizer, giving structured, defensible feedback rather than a single LLM verdict.
 
+## Screenshots
+
+| Landing | Sign up |
+|---|---|
+| ![Landing page](docs/screenshots/landing.png) | ![Register](docs/screenshots/register.png) |
+
+| Dashboard | Configure interview |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![New interview setup](docs/screenshots/new-interview.png) |
+
+| Live AI interview (voice + adaptive follow-up) |
+|---|
+| ![Live interview](docs/screenshots/live-interview.png) |
+
+| Feedback report | Resume vs. JD alignment |
+|---|---|
+| ![Feedback report](docs/screenshots/feedback-report.png) | ![Feedback detail](docs/screenshots/feedback-report-detail.png) |
+
 ## Tech Stack
 
 | Layer | Stack |
